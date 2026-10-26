@@ -11,7 +11,7 @@
   <h1>ImageSlidersJS</h1>
   <span id="dsName" class="dsname">No folder loaded</span>
   <span class="sp"></span>
-  <label class="chk"><input type="checkbox" id="showMap" checked> Reference map</label>
+  <label class="chk"><input type="checkbox" id="showMap"> Reference map</label>
   <label class="chk"><input type="checkbox" id="showAll"> All labels</label>
   <button id="btnFolder" title="Choose a folder that contains data.js and an images/ folder">Open folder…</button>
   <input type="file" id="folderIn" webkitdirectory hidden>
@@ -47,6 +47,18 @@
     <div id="toast"></div>
   </div>
 
+  <!-- Slider controls. Moved between this rail (vertical, the default) and the footer
+       (horizontal) according to isVerticalPath in data.js. -->
+  <div id="rail">
+    <div id="ctl" class="vertical">
+      <button id="play" title="Play / pause (Space)">▶</button>
+      <button id="prev" title="Previous frame">▲</button>
+      <input type="range" id="slider" min="0" max="0" value="0" step="1">
+      <button id="next" title="Next frame">▼</button>
+      <input type="number" id="frameNum" min="0" step="1" title="Go to frame">
+    </div>
+  </div>
+
   <aside>
     <section id="info"></section>
     <section><h2>Groups</h2><div id="groups"></div></section>
@@ -66,13 +78,7 @@
   </aside>
 </main>
 
-<footer>
-  <button id="play" style="width:42px">▶</button>
-  <button id="prev" title="Previous (←)">◀</button>
-  <input type="range" id="slider" min="0" max="0" value="0" step="1">
-  <button id="next" title="Next (→)">▶</button>
-  <input type="number" id="frameNum" min="0" step="1" title="Go to frame">
-</footer>
+<footer id="foot"></footer>
 
 <script src="src/dataset.js"></script>
 <script src="src/app.js"></script>

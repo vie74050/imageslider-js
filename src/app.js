@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  const { posAt, fromText } = window.MRIData;
+  const { posAt, fromText, fromJSON, empty } = window.MRIData;
   const MAP_DIR = 'src/';              // reference-map images live here
   const CAL_DEFAULT = { ox: 348, oy: 0, s: 1, ms: 14 };
 
@@ -45,16 +45,22 @@
     const parts = f => (f.webkitRelativePath || f.name).split('/');
     const root = parts(all[0])[0];
 
-    const dataFile = all.find(f => { const p = parts(f); return p.length === 2 && /^data\.js$/i.test(p[1]); })
-                  || all.find(f => { const p = parts(f); return p.length === 2 && /\.js$/i.test(p[1]); });
-    if (!dataFile) { toast('No data.js found in “' + root + '”.'); return; }
+    // data.js (or data.json) is optional: without it the images still load, with no map or points
+    const topLevel = (f, re) => { const p = parts(f); return p.length === 2 && re.test(p[1]); };
+    const dataFile = all.find(f => topLevel(f, /^data\.js$/i)) || all.find(f => topLevel(f, /^data\.json$/i))
+                  || all.find(f => topLevel(f, /\.js$/i));
 
     const slices = all.filter(f => { const p = parts(f); return p.length >= 3 && p[1].toLowerCase() === 'images' && isImage(f); }).sort(natural);
     if (!slices.length) { toast('No images found in “' + root + '/images/”.'); return; }
 
-    let ds;
-    try { ds = fromText(await dataFile.text(), 'folder:' + root, root); }
-    catch (e) { toast('Could not read ' + dataFile.name + ': ' + e.message); return; }
+    let ds = null, note = '';
+    if (dataFile) {
+      try {
+        const text = await dataFile.text();
+        ds = /\.json$/i.test(dataFile.name) ? fromJSON(text, 'folder:' + root, root) : fromText(text, 'folder:' + root, root);
+      } catch (e) { note = ' (could not read ' + dataFile.name + ': ' + e.message + ')'; }
+    } else note = ' (no data.js — no map or points)';
+    if (!ds) ds = empty('folder:' + root, root, slices.length);
 
     // optional: the reference-map image may sit in the chosen folder instead of src/
     const mapName = ds.meta.mapImage.toLowerCase();
@@ -74,8 +80,9 @@
     document.title = root + ' — ImageSlidersJS';
     $('empty').style.display = 'none';
     sizer.style.visibility = 'visible';
+    applyOrientation(ds.meta.isVerticalPath);
     buildMarkers(); renderGroups(); syncInputs(); setMap(); render();
-    toast('Loaded “' + root + '”: ' + S.files.length + ' images, ' + ds.points.length + ' points');
+    toast('Loaded “' + root + '”: ' + S.files.length + ' images' + (ds.points.length ? ', ' + ds.points.length + ' points' : '') + note);
   }
 
   function buildMarkers() {
@@ -83,9 +90,14 @@
     S.ds.points.forEach(p => {
       const d = document.createElement('div');
       d.className = 'pt';
-      d.style.border = p.bw + 'px solid ' + p.color;
-      d.innerHTML = '<span class="lbl"></span>';
-      d.firstChild.textContent = p.label;
+      // the inner .shape gets a class named after the data's "shape" (circle, square, arrow-up, ...)
+      const sh = document.createElement('span');
+      sh.className = 'shape ' + p.shape;
+      sh.style.setProperty('--c', p.color);
+      sh.style.setProperty('--bw', p.bw + 'px');
+      const lb = document.createElement('span');
+      lb.className = 'lbl'; lb.textContent = p.label;
+      d.append(sh, lb);
       d.addEventListener('click', e => { e.stopPropagation(); select(p.id); });
       ptsEl.appendChild(d); els.push(d);
     });
@@ -104,7 +116,7 @@
   }
   function renderInfo() {
     const el = $('info');
-    if (S.selected == null || !S.ds) { el.innerHTML = '<h2>Selected</h2><div style="color:var(--muted)">' + (S.ds ? 'Click a point on the image.' : 'Nothing loaded.') + '</div>'; return; }
+    if (S.selected == null || !S.ds) { el.innerHTML = '<h2>Selected</h2><div style="color:var(--muted)">' + (!S.ds ? 'Nothing loaded.' : S.ds.points.length ? 'Click a point on the image.' : 'No points for this folder.') + '</div>'; return; }
     const p = S.ds.points[S.selected], r = visibleRange(p), here = !!posAt(p, S.frame);
     el.innerHTML = '<h2>Selected</h2><div class="name"><span class="dot" style="border-color:' + p.color + ';display:inline-block;margin-right:6px"></span></div><div class="meta"></div><div class="meta st"></div>';
     el.querySelector('.name').appendChild(document.createTextNode(p.label));
@@ -209,9 +221,16 @@
       if (v) { el.style.left = '0'; el.style.right = '0'; el.style.top = a + '%'; el.style.height = b + '%'; }
       else { el.style.top = '0'; el.style.bottom = '0'; el.style.left = a + '%'; el.style.width = b + '%'; }
     };
+    // greyed-out areas lie across the other axis: left/right strips for a vertical path,
+    // top/bottom strips for a horizontal one
+    const setBlock = (el, a, b) => {
+      clear(el);
+      if (v) { el.style.top = '0'; el.style.bottom = '0'; el.style.left = a + '%'; el.style.width = b + '%'; }
+      else { el.style.left = '0'; el.style.right = '0'; el.style.top = a + '%'; el.style.height = b + '%'; }
+    };
     set(band, lo, hi - lo);
-    set(b1, 0, m.mapBlock1End);
-    set(b2, m.mapBlock2Start, 100 - m.mapBlock2Start);
+    setBlock(b1, 0, m.mapBlock1End);
+    setBlock(b2, m.mapBlock2Start, 100 - m.mapBlock2Start);
     b1.style.display = m.mapBlock1End > 0 ? 'block' : 'none';
     b2.style.display = m.mapBlock2Start < 100 ? 'block' : 'none';
     clear(cur);
@@ -259,6 +278,19 @@
   function go(f) { if (!S.ds) return; S.frame = Math.max(0, Math.min(frameCount() - 1, Math.round(f) || 0)); render(); }
 
   /* ---------- Controls ---------- */
+  // isVerticalPath (data.js, default true): vertical slider in a rail beside the image,
+  // otherwise a horizontal slider in the footer.
+  function applyOrientation(vertical) {
+    const ctl = $('ctl'), host = vertical ? $('rail') : $('foot');
+    if (ctl.parentNode !== host) host.appendChild(ctl);
+    ctl.classList.toggle('vertical', vertical);
+    ctl.classList.toggle('horizontal', !vertical);
+    $('prev').textContent = vertical ? '▲' : '◀';
+    $('next').textContent = vertical ? '▼' : '▶';
+    $('prev').title = 'Previous frame'; $('next').title = 'Next frame';
+    $('rail').style.display = vertical ? 'flex' : 'none';
+    $('foot').style.display = vertical ? 'none' : 'flex';
+  }
   slider.addEventListener('input', () => go(slider.value));
   frameNum.addEventListener('change', () => go(frameNum.value));
   $('prev').onclick = () => go(S.frame - 1);
@@ -279,8 +311,8 @@
     const t = e.target;
     if (t.tagName === 'SELECT' || (t.tagName === 'INPUT' && (t.type === 'text' || t.type === 'number'))) return;
     const step = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowRight') { go(S.frame + step); e.preventDefault(); }
-    else if (e.key === 'ArrowLeft') { go(S.frame - step); e.preventDefault(); }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { go(S.frame + step); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { go(S.frame - step); e.preventDefault(); }
     else if (e.key === 'Home') { go(0); e.preventDefault(); }
     else if (e.key === 'End') { go(frameCount() - 1); e.preventDefault(); }
     else if (e.key === ' ' && t.tagName !== 'BUTTON') { togglePlay(); e.preventDefault(); }
@@ -305,5 +337,6 @@
 
   /* ---------- Start with nothing loaded ---------- */
   sizer.style.visibility = 'hidden';
+  applyOrientation(true);
   fit(); renderInfo();
 })();

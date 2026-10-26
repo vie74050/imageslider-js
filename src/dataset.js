@@ -3,6 +3,8 @@
 (function (global) {
   'use strict';
 
+  // A point whose data `left` is under 5px is treated as hidden (data.js parks hidden points at -200).
+  const MIN_LEFT = 5;
   const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
 
   // data.js is a list of top-level assignments (mapImage=...; _points=[...];). They are
@@ -15,7 +17,10 @@
       set: (t, k, v) => { t[k] = v; return true; }
     });
     new Function('__ctx', 'with(__ctx){' + text + '\n}')(proxy);
+    return build(store, id, name);
+  }
 
+  function build(store, id, name, frames) {
     const raw = store._points;
     if (!Array.isArray(raw)) throw new Error('no _points array found');
     const points = raw.map((p, i) => {
@@ -24,12 +29,13 @@
         id: i,
         label: (p.label || '').trim(),
         group: (p.group || '').trim(),
+        shape: (String(p.shape || 'circle').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'circle'),
         color: p['border-color'] || '#ffffff',
         bw: parseInt(p['border-width'], 10) || 2,
         keys, pos: p.positions || {}
       };
     });
-    const maxKey = points.reduce((m, p) => Math.max(m, p.keys[p.keys.length - 1] || 0), 0);
+    const maxKey = points.length ? points.reduce((m, p) => Math.max(m, p.keys[p.keys.length - 1] || 0), 0) : Math.max(0, (frames || 1) - 1);
     return {
       id, name, points, maxKey,
       meta: {
@@ -44,20 +50,31 @@
   }
 
   // Position of a point on frame f, or null if it is not shown.
-  // A keyframe with left <= 0 (data.js uses -200) means "not shown from here".
+  // A keyframe with left < 5 (data.js uses -200) means "not shown from here".
   // Between two visible keyframes the point moves linearly.
   function posAt(p, f) {
     const k = p.keys; let lo = -1;
     for (let i = 0; i < k.length; i++) { if (k[i] <= f) lo = i; else break; }
     if (lo < 0) return null;
     const a = p.pos[k[lo]];
-    if (a.left <= 0) return null;
+    if (a.left < MIN_LEFT) return null;
     const nk = k[lo + 1];
     const b = nk !== undefined ? p.pos[nk] : null;
-    if (!b || b.left <= 0 || k[lo] === f) return { top: a.top, left: a.left };
+    if (!b || b.left < MIN_LEFT || k[lo] === f) return { top: a.top, left: a.left };
     const t = (f - k[lo]) / (nk - k[lo]);
     return { top: a.top + (b.top - a.top) * t, left: a.left + (b.left - a.left) * t };
   }
 
-  global.MRIData = { fromText, posAt };
+  // data.json: same fields as data.js (mapImage, startPercentage, ..., _points) as a JSON object.
+  function fromJSON(text, id, name) {
+    const o = JSON.parse(text);
+    return build(o, id, name);
+  }
+
+  // No data file: just the images — no points, no map.
+  function empty(id, name, frames) {
+    return build({ _points: [] }, id, name, frames);
+  }
+
+  global.MRIData = { fromText, fromJSON, empty, posAt };
 })(window);
