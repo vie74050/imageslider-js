@@ -3,72 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MRI Slice Viewer</title>
-<style>
-  :root { --bg:#0e1013; --panel:#171a1f; --line:#2a2f37; --text:#e6e8eb; --muted:#8b93a0; --accent:#4da3ff; }
-  * { box-sizing:border-box; }
-  html,body { height:100%; margin:0; }
-  body { background:var(--bg); color:var(--text); font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; display:flex; flex-direction:column; }
-  header { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--line); background:var(--panel); }
-  header h1 { font-size:15px; margin:0; font-weight:600; }
-  header .sp { flex:1; }
-  button, select, input[type=number], input[type=text] { background:#222730; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 10px; font:inherit; }
-  button { cursor:pointer; } button:hover { border-color:var(--accent); }
-  label.chk { display:flex; align-items:center; gap:6px; color:var(--muted); cursor:pointer; user-select:none; }
-  main { flex:1; min-height:0; display:flex; }
-  #stage { flex:1; min-width:0; position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-  #sizer { position:relative; }
-  #scene { position:absolute; left:0; top:0; transform-origin:0 0; background:#000; }
-  #img { display:block; width:100%; height:100%; user-select:none; -webkit-user-drag:none; }
-  #msg { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; color:var(--muted); padding:20px; background:#05070a; }
-  #stage.drag::after { content:"Drop image files to load"; position:absolute; inset:10px; border:2px dashed var(--accent); border-radius:10px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.6); font-size:18px; }
-  .pt { position:absolute; border-radius:50%; width:var(--ms); height:var(--ms); transform:translate(-50%,-50%); background:rgba(255,255,255,.05); cursor:pointer; display:none; }
-  .pt:hover, .pt.sel { background:rgba(255,255,255,.28); z-index:5; }
-  .pt.sel { box-shadow:0 0 0 calc(2px*var(--inv)) #fff; }
-  .pt .lbl { display:none; position:absolute; left:calc(100% + 4px*var(--inv)); top:50%; transform:translateY(-50%); white-space:nowrap; pointer-events:none;
-             font-size:calc(12px*var(--inv)); background:rgba(0,0,0,.85); color:#fff; padding:calc(2px*var(--inv)) calc(6px*var(--inv)); border-radius:calc(4px*var(--inv)); }
-  .pt.flip .lbl { left:auto; right:calc(100% + 4px*var(--inv)); }
-  .pt:hover .lbl, .pt.sel .lbl, #scene.showall .pt .lbl { display:block; }
-  #scene.showall .pt:hover, .pt:hover, .pt.sel { z-index:6; }
-  #hud { position:absolute; left:12px; top:10px; font-variant-numeric:tabular-nums; color:#fff; text-shadow:0 1px 3px #000; pointer-events:none; font-size:15px; }
-  aside { width:320px; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
-  aside section { padding:10px 12px; border-bottom:1px solid var(--line); }
-  aside h2 { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 8px; font-weight:600; }
-  #info .name { font-size:16px; font-weight:600; }
-  #info .meta { color:var(--muted); margin-top:2px; }
-  #groups { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { display:flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; user-select:none; font-size:12px; }
-  .chip.off { opacity:.35; }
-  .dot { width:10px; height:10px; border-radius:50%; flex:none; border:2px solid; }
-  #list { flex:1; overflow:auto; padding:6px 0; }
-  #list .grp { padding:6px 12px 2px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
-  #list .row { display:flex; align-items:center; gap:8px; padding:3px 12px; cursor:pointer; }
-  #list .row:hover { background:#202530; } #list .row.sel { background:#27406a; }
-  details { border-bottom:1px solid var(--line); }
-  details summary { padding:10px 12px; cursor:pointer; color:var(--muted); font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; }
-  details .body { padding:0 12px 12px; display:grid; grid-template-columns:auto 1fr; gap:6px 8px; align-items:center; }
-  details .body .full { grid-column:1/-1; }
-  details input[type=number], details input[type=text] { width:100%; }
-  details .hint { color:var(--muted); font-size:12px; }
-  footer { padding:10px 14px; border-top:1px solid var(--line); background:var(--panel); display:flex; align-items:center; gap:12px; }
-  #slider { flex:1; height:28px; accent-color:var(--accent); }
-  #frameNum { width:78px; text-align:center; }
-  @media (max-width:800px){ main{flex-direction:column;} aside{width:auto; max-height:42vh; border-left:0; border-top:1px solid var(--line);} }
-</style>
+<title>ImageSlidersJS</title>
+<link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
 <header>
-  <h1>MRI Slice Viewer</h1>
+  <h1>ImageSlidersJS</h1>
+  <span id="dsName" class="dsname">No folder loaded</span>
   <span class="sp"></span>
-  <label class="chk"><input type="checkbox" id="showAll"> Show all labels</label>
-  <button id="btnFiles" title="Pick the 96 image files">Load images…</button>
-  <button id="btnFolder" title="Pick a folder of images">Load folder…</button>
-  <input type="file" id="fileIn" accept="image/*" multiple hidden>
+  <label class="chk"><input type="checkbox" id="showMap" checked> Reference map</label>
+  <label class="chk"><input type="checkbox" id="showAll"> All labels</label>
+  <button id="btnFolder" title="Choose a folder that contains data.js and an images/ folder">Open folder…</button>
   <input type="file" id="folderIn" webkitdirectory hidden>
 </header>
 
 <main>
   <div id="stage">
+    <div id="empty">
+      <div class="big">No folder loaded</div>
+      <p>Choose a folder that contains a <code>data.js</code> and an <code>images/</code> folder.</p>
+      <button id="btnFolder2">Open folder…</button>
+    </div>
+
     <div id="sizer">
       <div id="scene">
         <img id="img" alt="MRI slice" draggable="false">
@@ -77,18 +33,27 @@
       </div>
     </div>
     <div id="hud"></div>
+
+    <div id="map" hidden>
+      <div id="mapwrap">
+        <img id="mapImg" alt="Reference map" draggable="false">
+        <div class="blk" id="blk1"></div>
+        <div class="blk" id="blk2"></div>
+        <div id="band"></div>
+        <div id="cursor"></div>
+      </div>
+      <div id="mapLabel"></div>
+    </div>
+    <div id="toast"></div>
   </div>
 
   <aside>
-    <section id="info"><h2>Selected</h2><div class="hintline" style="color:var(--muted)">Click a point on the image.</div></section>
+    <section id="info"></section>
     <section><h2>Groups</h2><div id="groups"></div></section>
     <details>
-      <summary>Images &amp; calibration</summary>
+      <summary>Calibration</summary>
       <div class="body">
-        <span class="full hint">Image path pattern — each # is a digit of the frame number (e.g. <code>images/A11####.jpg</code>). Or use “Load images…” above.</span>
-        <label>Path</label><input type="text" id="pattern">
-        <label>First #</label><input type="number" id="startIdx" step="1">
-        <span class="full hint">Point alignment (data coordinates → image pixels)</span>
+        <span class="full hint">Point alignment (data coordinates → image pixels). Saved per folder name.</span>
         <label>Offset X</label><input type="number" id="offX" step="1">
         <label>Offset Y</label><input type="number" id="offY" step="1">
         <label>Scale</label><input type="number" id="scl" step="0.01">
@@ -96,7 +61,7 @@
         <button class="full" id="resetCal">Reset defaults</button>
       </div>
     </details>
-    <div style="padding:10px 12px 0"><h2 style="margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">In this frame</h2></div>
+    <div class="listhead"><h2>In this frame</h2></div>
     <div id="list"></div>
   </aside>
 </main>
@@ -104,264 +69,12 @@
 <footer>
   <button id="play" style="width:42px">▶</button>
   <button id="prev" title="Previous (←)">◀</button>
-  <input type="range" id="slider" min="0" max="95" value="0" step="1">
+  <input type="range" id="slider" min="0" max="0" value="0" step="1">
   <button id="next" title="Next (→)">▶</button>
   <input type="number" id="frameNum" min="0" step="1" title="Go to frame">
 </footer>
 
-<script src="data.js"></script>
-<script>
-(function () {
-  'use strict';
-
-  /* ---------- Data ---------- */
-  const RAW = (typeof _points !== 'undefined') ? _points : [];
-  const POINTS = RAW.map((p, i) => {
-    const keys = Object.keys(p.positions).map(Number).sort((a, b) => a - b);
-    return {
-      id: i,
-      label: (p.label || '').trim(),
-      group: (p.group || '').trim(),
-      color: p['border-color'] || '#ffffff',
-      bw: parseInt(p['border-width'], 10) || 2,
-      keys, pos: p.positions
-    };
-  });
-  const MAXKEY = POINTS.reduce((m, p) => Math.max(m, p.keys[p.keys.length - 1] || 0), 0);
-
-  // A keyframe with left <= 0 (data.js uses -200) means "not shown".
-  function posAt(p, f) {
-    const k = p.keys; let lo = -1;
-    for (let i = 0; i < k.length; i++) { if (k[i] <= f) lo = i; else break; }
-    if (lo < 0) return null;
-    const a = p.pos[k[lo]];
-    if (a.left <= 0) return null;
-    const nk = k[lo + 1];
-    const b = nk !== undefined ? p.pos[nk] : null;
-    if (!b || b.left <= 0 || k[lo] === f) return { top: a.top, left: a.left };
-    const t = (f - k[lo]) / (nk - k[lo]);
-    return { top: a.top + (b.top - a.top) * t, left: a.left + (b.left - a.left) * t };
-  }
-
-  /* ---------- State ---------- */
-  const DEFAULTS = { pattern: 'images/A11####.jpg', start: 0, ox: 348, oy: 0, s: 1, ms: 14 };
-  const state = Object.assign({ frame: 0, files: [], selected: null, hiddenGroups: new Set(), natW: 512, natH: 512, zoom: 1, playing: false }, load());
-  function load() { try { return JSON.parse(localStorage.getItem('mriviewer') || '{}'); } catch (e) { return {}; } }
-  function save() {
-    try { localStorage.setItem('mriviewer', JSON.stringify({ pattern: state.pattern, start: state.start, ox: state.ox, oy: state.oy, s: state.s, ms: state.ms })); } catch (e) {}
-  }
-  for (const k in DEFAULTS) if (state[k] === undefined) state[k] = DEFAULTS[k];
-
-  const $ = id => document.getElementById(id);
-  const stage = $('stage'), sizer = $('sizer'), scene = $('scene'), img = $('img'), msg = $('msg'), ptsEl = $('pts');
-  const slider = $('slider'), frameNum = $('frameNum');
-
-  const frameCount = () => state.files.length || (MAXKEY + 1);
-
-  /* ---------- Markers ---------- */
-  const els = POINTS.map(p => {
-    const d = document.createElement('div');
-    d.className = 'pt';
-    d.style.border = p.bw + 'px solid ' + p.color;
-    d.innerHTML = '<span class="lbl"></span>';
-    d.firstChild.textContent = p.label;
-    d.addEventListener('click', e => { e.stopPropagation(); select(p.id); });
-    ptsEl.appendChild(d);
-    return d;
-  });
-  stage.addEventListener('click', () => select(null));
-
-  function select(id) {
-    state.selected = id;
-    els.forEach((e, i) => e.classList.toggle('sel', i === id));
-    renderInfo(); renderList();
-  }
-
-  function visibleRange(p) {
-    let first = -1, last = -1;
-    for (let f = 0; f < frameCount(); f++) if (posAt(p, f)) { if (first < 0) first = f; last = f; }
-    return first < 0 ? null : [first, last];
-  }
-
-  function renderInfo() {
-    const el = $('info');
-    if (state.selected == null) { el.innerHTML = '<h2>Selected</h2><div style="color:var(--muted)">Click a point on the image.</div>'; return; }
-    const p = POINTS[state.selected];
-    const r = visibleRange(p);
-    const here = !!posAt(p, state.frame);
-    el.innerHTML = '<h2>Selected</h2><div class="name"><span class="dot" style="border-color:' + p.color + ';display:inline-block;margin-right:6px"></span></div><div class="meta"></div><div class="meta st"></div>';
-    el.querySelector('.name').appendChild(document.createTextNode(p.label));
-    el.querySelector('.meta').textContent = p.group;
-    el.querySelector('.st').textContent = (r ? 'Visible on frames ' + r[0] + '–' + r[1] : 'Never visible') + (here ? '' : ' · not in this frame');
-  }
-
-  function renderList() {
-    const box = $('list'); box.textContent = '';
-    const vis = POINTS.filter(p => posAt(p, state.frame) && !state.hiddenGroups.has(p.group))
-      .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
-    let g = null;
-    vis.forEach(p => {
-      if (p.group !== g) { g = p.group; const h = document.createElement('div'); h.className = 'grp'; h.textContent = g; box.appendChild(h); }
-      const row = document.createElement('div');
-      row.className = 'row' + (p.id === state.selected ? ' sel' : '');
-      row.innerHTML = '<span class="dot" style="border-color:' + p.color + '"></span><span></span>';
-      row.lastChild.textContent = p.label;
-      row.onclick = e => { e.stopPropagation(); select(p.id); };
-      box.appendChild(row);
-    });
-    if (!vis.length) box.innerHTML = '<div class="grp">No points in this frame</div>';
-  }
-
-  function renderGroups() {
-    const box = $('groups'); box.textContent = '';
-    const seen = new Map();
-    POINTS.forEach(p => { if (!seen.has(p.group)) seen.set(p.group, p.color); });
-    seen.forEach((color, g) => {
-      const c = document.createElement('div');
-      c.className = 'chip' + (state.hiddenGroups.has(g) ? ' off' : '');
-      c.innerHTML = '<span class="dot" style="border-color:' + color + '"></span><span></span>';
-      c.lastChild.textContent = g;
-      c.onclick = () => { state.hiddenGroups.has(g) ? state.hiddenGroups.delete(g) : state.hiddenGroups.add(g); renderGroups(); render(); };
-      box.appendChild(c);
-    });
-  }
-
-  /* ---------- Images ---------- */
-  function srcFor(i) {
-    if (state.files.length) return state.files[i] ? state.files[i].url : '';
-    const n = String(i + (parseInt(state.start, 10) || 0));
-    return state.pattern.replace(/#+/g, m => n.padStart(m.length, '0'));
-  }
-  const preloaded = new Map();
-  function preload(i) {
-    if (i < 0 || i >= frameCount() || preloaded.has(i)) return;
-    const im = new Image(); im.src = srcFor(i); preloaded.set(i, im);
-    if (preloaded.size > 40) preloaded.delete(preloaded.keys().next().value);
-  }
-
-  img.addEventListener('load', () => {
-    msg.style.display = 'none';
-    if (img.naturalWidth && (img.naturalWidth !== state.natW || img.naturalHeight !== state.natH)) {
-      state.natW = img.naturalWidth; state.natH = img.naturalHeight; fit(); render();
-    }
-  });
-  img.addEventListener('error', () => {
-    msg.style.display = 'flex';
-    msg.textContent = state.files.length ? 'Could not display this image file.'
-      : 'Image not found: ' + srcFor(state.frame) + '\nAdjust the path under “Images & calibration”, or use “Load images…”.';
-    msg.style.whiteSpace = 'pre-line';
-  });
-
-  /* ---------- Layout ---------- */
-  function fit() {
-    const aw = stage.clientWidth, ah = stage.clientHeight;
-    state.zoom = Math.min(aw / state.natW, ah / state.natH);
-    sizer.style.width = state.natW * state.zoom + 'px';
-    sizer.style.height = state.natH * state.zoom + 'px';
-    scene.style.width = state.natW + 'px';
-    scene.style.height = state.natH + 'px';
-    scene.style.transform = 'scale(' + state.zoom + ')';
-    scene.style.setProperty('--inv', 1 / state.zoom);
-  }
-
-  /* ---------- Render ---------- */
-  function render() {
-    const f = state.frame, N = frameCount();
-    slider.max = N - 1; slider.value = f; frameNum.value = f; frameNum.max = N - 1;
-    scene.style.setProperty('--ms', state.ms + 'px');
-    const src = srcFor(f);
-    if (img.getAttribute('src') !== src) img.src = src;
-    $('hud').textContent = 'Frame ' + f + ' / ' + (N - 1);
-
-    const s = Number(state.s) || 1, ox = Number(state.ox) || 0, oy = Number(state.oy) || 0;
-    POINTS.forEach(p => {
-      const pos = posAt(p, f), el = els[p.id];
-      if (!pos || state.hiddenGroups.has(p.group)) { el.style.display = 'none'; return; }
-      const x = (pos.left - ox) * s, y = (pos.top - oy) * s;
-      el.style.display = 'block';
-      el.style.left = x + 'px'; el.style.top = y + 'px';
-      el.classList.toggle('flip', x > state.natW * 0.6);
-    });
-    renderList(); renderInfo();
-    for (let d = 1; d <= 3; d++) { preload(f + d); preload(f - d); }
-  }
-
-  function go(f) {
-    const N = frameCount();
-    state.frame = Math.max(0, Math.min(N - 1, Math.round(f) || 0));
-    render();
-  }
-
-  /* ---------- Controls ---------- */
-  slider.addEventListener('input', () => go(slider.value));
-  frameNum.addEventListener('change', () => go(frameNum.value));
-  $('prev').onclick = () => go(state.frame - 1);
-  $('next').onclick = () => go(state.frame + 1);
-  $('showAll').onchange = e => scene.classList.toggle('showall', e.target.checked);
-
-  let timer = null;
-  function togglePlay() {
-    state.playing = !state.playing;
-    $('play').textContent = state.playing ? '❚❚' : '▶';
-    clearInterval(timer);
-    if (state.playing) timer = setInterval(() => go(state.frame + 1 >= frameCount() ? 0 : state.frame + 1), 90);
-  }
-  $('play').onclick = togglePlay;
-
-  document.addEventListener('keydown', e => {
-    const t = e.target;
-    if (t.tagName === 'INPUT' && (t.type === 'text' || t.type === 'number')) return;
-    const step = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowRight') { go(state.frame + step); e.preventDefault(); }
-    else if (e.key === 'ArrowLeft') { go(state.frame - step); e.preventDefault(); }
-    else if (e.key === 'Home') { go(0); e.preventDefault(); }
-    else if (e.key === 'End') { go(frameCount() - 1); e.preventDefault(); }
-    else if (e.key === ' ' && t.tagName !== 'BUTTON') { togglePlay(); e.preventDefault(); }
-    else if (e.key === 'Escape') select(null);
-  });
-
-  // Calibration inputs
-  function bind(id, key, isText) {
-    const el = $(id); el.value = state[key];
-    el.addEventListener('input', () => {
-      state[key] = isText ? el.value : (parseFloat(el.value) || 0);
-      save(); preloaded.clear();
-      render();
-    });
-  }
-  bind('pattern', 'pattern', true); bind('startIdx', 'start'); bind('offX', 'ox'); bind('offY', 'oy'); bind('scl', 's'); bind('msz', 'ms');
-  $('resetCal').onclick = () => {
-    ['ox', 'oy', 's', 'ms'].forEach(k => state[k] = DEFAULTS[k]);
-    $('offX').value = state.ox; $('offY').value = state.oy; $('scl').value = state.s; $('msz').value = state.ms;
-    save(); render();
-  };
-
-  // Loading files from disk (sorted naturally by file name)
-  function loadFiles(list) {
-    const files = Array.from(list).filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|gif|bmp|webp)$/i.test(f.name))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    if (!files.length) return;
-    state.files.forEach(f => URL.revokeObjectURL(f.url));
-    state.files = files.map(f => ({ name: f.name, url: URL.createObjectURL(f) }));
-    preloaded.clear();
-    state.frame = Math.min(state.frame, state.files.length - 1);
-    render();
-  }
-  $('btnFiles').onclick = () => $('fileIn').click();
-  $('btnFolder').onclick = () => $('folderIn').click();
-  $('fileIn').onchange = e => loadFiles(e.target.files);
-  $('folderIn').onchange = e => loadFiles(e.target.files);
-  ['dragenter', 'dragover'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); stage.classList.add('drag'); }));
-  ['dragleave', 'drop'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); stage.classList.remove('drag'); }));
-  stage.addEventListener('drop', e => loadFiles(e.dataTransfer.files));
-
-  window.addEventListener('resize', fit);
-  new ResizeObserver(fit).observe(stage);
-
-  /* ---------- Init ---------- */
-  if (!POINTS.length) { msg.style.display = 'flex'; msg.textContent = 'data.js not found next to this page.'; }
-  renderGroups(); fit(); render();
-})();
-</script>
+<script src="src/dataset.js"></script>
+<script src="src/app.js"></script>
 </body>
 </html>
