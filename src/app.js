@@ -66,24 +66,96 @@
     const mapName = ds.meta.mapImage.toLowerCase();
     const mapFile = mapName ? all.find(f => isImage(f) && f.name.toLowerCase() === mapName && !slices.includes(f)) : null;
 
+    show(root, slices.map(f => ({ name: f.name, url: URL.createObjectURL(f) })), ds,
+         mapFile ? URL.createObjectURL(mapFile) : '', note, true);
+  }
+
+  // Common to a picked folder and a server sample: swap in the images + dataset and redraw.
+  function show(title, files, ds, mapUrl, note, revoke) {
     stopPlay();
-    S.files.forEach(f => URL.revokeObjectURL(f.url));
-    if (S.mapUrl) URL.revokeObjectURL(S.mapUrl);
-    S.files = slices.map(f => ({ name: f.name, url: URL.createObjectURL(f) }));
-    S.mapUrl = mapFile ? URL.createObjectURL(mapFile) : '';
+    if (S.revoke) { S.files.forEach(f => URL.revokeObjectURL(f.url)); if (S.mapUrl) URL.revokeObjectURL(S.mapUrl); }
+    S.revoke = !!revoke;
+    S.files = files; S.mapUrl = mapUrl || '';
     preloaded.clear();
 
     S.ds = ds; S.frame = 0; S.selected = null; S.hiddenGroups = new Set();
     S.cal = loadCal();
-    $('dsName').textContent = root;
+    $('dsName').textContent = title;
     $('dsName').classList.add('loaded');
-    document.title = root + ' — ImageSlidersJS';
+    document.title = title + ' — ImageSlidersJS';
     $('empty').style.display = 'none';
     sizer.style.visibility = 'visible';
     applyOrientation(ds.meta.isVerticalPath);
     buildMarkers(); renderGroups(); syncInputs(); setMap(); render();
-    toast('Loaded “' + root + '”: ' + S.files.length + ' images' + (ds.points.length ? ', ' + ds.points.length + ' points' : '') + note);
+    toast('Loaded “' + title + '”: ' + S.files.length + ' images' + (ds.points.length ? ', ' + ds.points.length + ' points' : '') + (note || ''));
   }
+
+  /* ---------- Server samples: imagesets/<CT|MRI>/<name>/{images/, data.js} ---------- */
+  const SAMPLE_ROOT = 'imagesets/';
+  const SAMPLE_GROUPS = ['CT', 'MRI'];
+  // Used only if the server does not allow directory listings.
+  const SAMPLE_FALLBACK = {
+    CT: ['abdomen-axial', 'abdomen-coronal', 'abdomen-sagittal'],
+    MRI: ['Ankle_66_A3_T1-axial', 'Ankle_66_A4_T2_STIR-coronal', 'Ankle_66_A7_T1-sagittal',
+          'Brain_Axial_MPRAGE_T1_3D', 'Brain_Axial_T2', 'Brain_Coronal_T2',
+          'elbow29-A1_Axial_T1__34', 'elbow29-A3_Cor_T1__22', 'elbow29-A5_Sag_T2_FAT__24',
+          'Hand_Right_Axial_T1', 'Hand_Right_Coronal_T1', 'Hand_Right_Sagittal_T1',
+          'knee69-A2_T2_FAT-axial', 'knee69-A3_T2_FAT-coronal', 'knee69-A6_T2-sagittal',
+          'Shoulder_Right_Axial_PD', 'Shoulder_Right_Coronal_PD', 'Shoulder_Right_Sagittal_T1']
+  };
+  const encPath = s => s.split('/').map(encodeURIComponent).join('/');
+
+  // Read the links out of a server directory listing (Apache/nginx autoindex, python http.server...).
+  async function listDir(url) {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+    return Array.from(doc.querySelectorAll('a[href]')).map(a => a.getAttribute('href'))
+      .filter(h => h && !/^([a-z]+:|\/\/|[?#]|\.\.?\/?$)/i.test(h))
+      .map(h => decodeURIComponent(h.split(/[?#]/)[0]))
+      .filter(h => h && !h.startsWith('/'));
+  }
+
+  async function discoverSamples() {
+    const sel = $('sampleSel');
+    sel.innerHTML = '<option value="">Samples…</option>';
+    for (const g of SAMPLE_GROUPS) {
+      let names;
+      try { names = (await listDir(SAMPLE_ROOT + g + '/')).filter(n => n.endsWith('/')).map(n => n.slice(0, -1)); }
+      catch (e) { names = []; }
+      if (!names.length) names = SAMPLE_FALLBACK[g] || [];
+      const og = document.createElement('optgroup'); og.label = g;
+      names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(n => {
+        const o = document.createElement('option'); o.value = g + '/' + n; o.textContent = n.replace(/_/g, ' '); og.appendChild(o);
+      });
+      if (names.length) sel.appendChild(og);
+    }
+    sel.hidden = sel.options.length < 2;
+  }
+
+  async function loadSample(path) {
+    const base = SAMPLE_ROOT + encPath(path) + '/';
+    const title = path.split('/').pop();
+    let names;
+    try { names = await listDir(base + 'images/'); }
+    catch (e) { toast('Could not list ' + SAMPLE_ROOT + path + '/images/ — the server needs directory listing enabled.'); return; }
+    names = names.filter(n => /\.(png|jpe?g|gif|bmp|webp)$/i.test(n)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (!names.length) { toast('No images found in ' + SAMPLE_ROOT + path + '/images/.'); return; }
+
+    let ds = null, note = '';
+    for (const fn of ['data.js', 'data.json']) {
+      try {
+        const r = await fetch(base + fn, { cache: 'no-store' });
+        if (!r.ok) continue;
+        const text = await r.text();
+        ds = /\.json$/i.test(fn) ? fromJSON(text, 'sample:' + path, title) : fromText(text, 'sample:' + path, title);
+        break;
+      } catch (e) { note = ' (could not read ' + fn + ': ' + e.message + ')'; }
+    }
+    if (!ds) { ds = empty('sample:' + path, title, names.length); note = note || ' (no data.js — no map or points)'; }
+    show(title, names.map(n => ({ name: n, url: base + 'images/' + encodeURIComponent(n) })), ds, '', note, false);
+  }
+  $('sampleSel').addEventListener('change', e => { if (e.target.value) loadSample(e.target.value); });
 
   function buildMarkers() {
     ptsEl.textContent = ''; els = [];
@@ -336,6 +408,7 @@
   new ResizeObserver(fit).observe(stage);
 
   /* ---------- Start with nothing loaded ---------- */
+  discoverSamples();
   sizer.style.visibility = 'hidden';
   applyOrientation(true);
   fit(); renderInfo();

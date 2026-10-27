@@ -1,0 +1,1 @@
+mapImage='map_frontal.gif';startPercentage=5;stopPercentage=0;mapBlock1End=22;mapBlock2Start=80;isVerticalPath=true;_points=[];

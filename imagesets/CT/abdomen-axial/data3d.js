@@ -1,0 +1,1 @@
+{"PlanePosition":[0,0.0285713672637939,0.5],"PlaneRotation":[0,0,0],"PlaneScale":0.452857106924057,"PlaneDistance":-0.285714089870453,"FrameRotation":[90,0,0]}

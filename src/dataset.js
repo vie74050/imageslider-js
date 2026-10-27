@@ -56,12 +56,12 @@
     const k = p.keys; let lo = -1;
     for (let i = 0; i < k.length; i++) { if (k[i] <= f) lo = i; else break; }
     if (lo < 0) return null;
-    const a = p.pos[k[lo]]; console.log('left:', a.left, 'MIN_LEFT:', MIN_LEFT);
+    const a = p.pos[k[lo]];
     if (a.left < MIN_LEFT) return null;
     const nk = k[lo + 1];
     const b = nk !== undefined ? p.pos[nk] : null;
     if (!b || b.left < MIN_LEFT || k[lo] === f) return { top: a.top, left: a.left };
-    const t = (f - k[lo]) / (nk - k[lo]); 
+    const t = (f - k[lo]) / (nk - k[lo]);
     return { top: a.top + (b.top - a.top) * t, left: a.left + (b.left - a.left) * t };
   }
 
