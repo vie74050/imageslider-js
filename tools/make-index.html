@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build index.json — ImageSlidersJS</title>
+<style>
+  body { font:15px/1.5 system-ui,sans-serif; max-width:680px; margin:40px auto; padding:0 16px; color:#222; }
+  button { font:inherit; padding:8px 16px; cursor:pointer; }
+  pre { background:#f4f4f4; padding:12px; border-radius:6px; overflow:auto; max-height:320px; }
+  code { background:#f4f4f4; padding:1px 5px; border-radius:4px; }
+</style></head><body>
+<h1>Build <code>imagesets/index.json</code></h1>
+<ol>
+  <li>Click <b>Choose imagesets folder…</b> and pick your <code>imagesets</code> folder (the one that contains <code>CT</code> and <code>MRI</code>). Nothing is uploaded; the files are only read for their names.</li>
+  <li>Save the downloaded <code>index.json</code> into <code>imagesets/</code>, replacing any older copy, and commit it.</li>
+</ol>
+<p><button id="pick">Choose imagesets folder…</button> <input type="file" id="f" webkitdirectory hidden></p>
+<pre id="log">Waiting for a folder…</pre>
+<p><button id="dl" hidden>Download index.json</button></p>
+<script>
+const IMG = /\.(png|jpe?g|gif|bmp|webp)$/i;
+const nat = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+let json = '';
+document.getElementById('pick').onclick = () => document.getElementById('f').click();
+document.getElementById('f').onchange = e => {
+  // paths look like  imagesets/<group>/<sample>/images/<file>  or  imagesets/<group>/<sample>/data.js
+  const found = {};
+  for (const f of e.target.files) {
+    const p = f.webkitRelativePath.split('/');
+    if (p.length === 5 && p[3].toLowerCase() === 'images' && IMG.test(p[4])) ((found[p[1]] = found[p[1]] || {})[p[2]] = found[p[1]][p[2]] || { images: [] }).images.push(p[4]);
+    else if (p.length === 4 && /^data\.jsonx?$/i.test(p[3]) || p.length === 4 && /^data\.js$/i.test(p[3])) {
+      const s = ((found[p[1]] = found[p[1]] || {})[p[2]] = found[p[1]][p[2]] || { images: [] });
+      if (!s.data || /\.js$/i.test(p[3])) s.data = p[3];
+    }
+  }
+  const out = {}, lines = []; let n = 0;
+  Object.keys(found).sort(nat).forEach(g => Object.keys(found[g]).sort(nat).forEach(s => {
+    const v = found[g][s]; if (!v.images.length) return;
+    v.images.sort(nat); (out[g] = out[g] || {})[s] = v.data ? { images: v.images, data: v.data } : { images: v.images };
+    lines.push(g + '/' + s + ': ' + v.images.length + ' images' + (v.data ? ', ' + v.data : ', no data file')); n++;
+  }));
+  json = JSON.stringify(out);
+  document.getElementById('log').textContent = n ? lines.join('\n') + '\n\n' + n + ' samples' : 'No samples found. Pick the folder that contains CT/ and MRI/ (each sample needs an images/ subfolder).';
+  document.getElementById('dl').hidden = !n;
+};
+document.getElementById('dl').onclick = () => {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  a.download = 'index.json'; a.click();
+};
+</script></body></html>

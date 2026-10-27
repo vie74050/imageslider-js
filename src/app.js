@@ -116,13 +116,68 @@
       .filter(h => h && !h.startsWith('/'));
   }
 
+  // Where the list of samples and their image names comes from, first match wins:
+  //   1. imagesets/index.json  (made by tools/make-index.py; works on any static host)
+  //   2. the GitHub API file tree (on *.github.io or ?repo=owner/name[@branch])
+  //   3. the server's own directory listing (local dev servers)
+  //   4. a built-in list of folder names (menu only)
+  // Catalog shape: { CT: { name: { images: [files], data: 'data.js' | undefined } }, MRI: {...} }
+  let catalogP;
+  const catalog = () => catalogP || (catalogP = buildCatalog());
+  const IMG_RE = /\.(png|jpe?g|gif|bmp|webp)$/i;
+
+  async function buildCatalog() {
+    try {
+      const r = await fetch(SAMPLE_ROOT + 'index.json', { cache: 'no-store' });
+      if (r.ok) { const c = fromIndex(await r.json()); if (Object.keys(c).length) return c; }
+    } catch (e) {}
+    return githubTree();
+  }
+  function fromIndex(raw) {
+    const out = {};
+    Object.keys(raw || {}).forEach(g => Object.keys(raw[g] || {}).forEach(n => {
+      const v = raw[g][n];
+      const images = Array.isArray(v) ? v : (v && v.images) || [];
+      if (images.length) ((out[g] = out[g] || {})[n] = { images: images.slice(), data: Array.isArray(v) ? undefined : v.data || undefined });
+    }));
+    return out;
+  }
+
+  function repoRef() {
+    const q = new URLSearchParams(location.search).get('repo');
+    if (q) { const m = q.match(/^([^/\s]+)\/([^@\s]+)(?:@(\S+))?$/); return m && { owner: m[1], repo: m[2], ref: m[3] || 'HEAD' }; }
+    const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+    if (!m) return null;
+    const first = location.pathname.split('/').filter(Boolean)[0];
+    return { owner: m[1], repo: first && !/\.html?$/i.test(first) ? first : m[1] + '.github.io', ref: 'HEAD' };
+  }
+  async function githubTree() {
+    const r = repoRef(); if (!r) return null;
+    try {
+      const res = await fetch('https://api.github.com/repos/' + r.owner + '/' + r.repo + '/git/trees/' + encodeURIComponent(r.ref) + '?recursive=1');
+      if (!res.ok) throw new Error(res.status);
+      const out = {};
+      (await res.json()).tree.forEach(t => {
+        if (t.type !== 'blob') return;
+        let m = t.path.match(/(?:^|\/)imagesets\/([^/]+)\/([^/]+)\/images\/([^/]+)$/);
+        if (m && IMG_RE.test(m[3])) { const e = ((out[m[1]] = out[m[1]] || {})[m[2]] = out[m[1]][m[2]] || { images: [] }); e.images.push(m[3]); return; }
+        m = t.path.match(/(?:^|\/)imagesets\/([^/]+)\/([^/]+)\/(data\.js|data\.json)$/i);
+        if (m) { const e = ((out[m[1]] = out[m[1]] || {})[m[2]] = out[m[1]][m[2]] || { images: [] }); if (!e.data || /\.js$/i.test(m[3])) e.data = m[3]; }
+      });
+      return Object.keys(out).length ? out : null;
+    } catch (e) { return null; }
+  }
+
   async function discoverSamples() {
     const sel = $('sampleSel');
     sel.innerHTML = '<option value="">Samples…</option>';
+    const cat = await catalog();
     for (const g of SAMPLE_GROUPS) {
-      let names;
-      try { names = (await listDir(SAMPLE_ROOT + g + '/')).filter(n => n.endsWith('/')).map(n => n.slice(0, -1)); }
-      catch (e) { names = []; }
+      let names = cat && cat[g] ? Object.keys(cat[g]) : [];
+      if (!names.length) {
+        try { names = (await listDir(SAMPLE_ROOT + g + '/')).filter(n => n.endsWith('/')).map(n => n.slice(0, -1)); }
+        catch (e) { names = []; }
+      }
       if (!names.length) names = SAMPLE_FALLBACK[g] || [];
       const og = document.createElement('optgroup'); og.label = g;
       names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).forEach(n => {
@@ -136,14 +191,20 @@
   async function loadSample(path) {
     const base = SAMPLE_ROOT + encPath(path) + '/';
     const title = path.split('/').pop();
+    const [g, n] = path.split('/');
+    const cat = await catalog();
+    const entry = cat && cat[g] && cat[g][n];
     let names;
-    try { names = await listDir(base + 'images/'); }
-    catch (e) { toast('Could not list ' + SAMPLE_ROOT + path + '/images/ — the server needs directory listing enabled.'); return; }
-    names = names.filter(n => /\.(png|jpe?g|gif|bmp|webp)$/i.test(n)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (entry) names = entry.images.slice();
+    else {
+      try { names = await listDir(base + 'images/'); }
+      catch (e) { toast('Could not list the images in ' + SAMPLE_ROOT + path + '/images/. Run tools/make-index.py to create imagesets/index.json.'); return; }
+    }
+    names = names.filter(f => IMG_RE.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     if (!names.length) { toast('No images found in ' + SAMPLE_ROOT + path + '/images/.'); return; }
 
     let ds = null, note = '';
-    for (const fn of ['data.js', 'data.json']) {
+    for (const fn of (entry ? (entry.data ? [entry.data] : []) : ['data.js', 'data.json'])) {
       try {
         const r = await fetch(base + fn, { cache: 'no-store' });
         if (!r.ok) continue;
